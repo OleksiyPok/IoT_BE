@@ -2,7 +2,7 @@
 
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel
 
 from iot_client import send_led_command
@@ -21,13 +21,16 @@ router = APIRouter(
 @router.post(
     "/led",
     summary="Send LED command",
-    description="Send LED command",
-    status_code=202,
+    description="Send a command to change the LED state.",
+    status_code=status.HTTP_200_OK,
 )
 def set_led(cmd: LedCommand):
     try:
         send_led_command(cmd.value)
     except Exception:
-        raise HTTPException(502, "AWS IoT unavailable")
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to send LED command",
+        )
 
     return {"accepted": True, "value": cmd.value}

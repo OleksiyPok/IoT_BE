@@ -10,8 +10,8 @@ router = APIRouter(
 
 @router.get(
     "/health",
-    summary="Health Check",
-    description="Health Check",
+    summary="Check service health",
+    description="Check whether the API service is operational.",
     status_code=status.HTTP_200_OK,
 )
 def health():

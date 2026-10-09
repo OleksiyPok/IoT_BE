@@ -1,7 +1,7 @@
 # BE/main.py
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
@@ -16,8 +16,8 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # демо; у проді — список
-    allow_credentials=False,  # кукі не використовуємо
-    allow_methods=["GET", "POST"],  # default — тільки GET
+    allow_credentials=False,  # no cookies
+    allow_methods=["GET", "POST"],  # default — only GET
     allow_headers=["Content-Type"],
 )
 

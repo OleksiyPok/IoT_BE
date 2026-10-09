@@ -1,22 +1,24 @@
-from fastapi import FastAPI, HTTPException
+# BE/main.py
+
 from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
-load_dotenv()          # ← до імпорту db, щоб змінні вже були в середовищі
-import db
+load_dotenv()
+from router import router
 
-app = FastAPI(title="IoT Backend")
+app = FastAPI(
+    title="IoT Backend",
+    swagger_ui_parameters={
+        "docExpansion": "none",
+    },
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # демо; у проді — список
+    allow_credentials=False,  # кукі не використовуємо
+    allow_methods=["GET", "POST"],  # default — тільки GET
+    allow_headers=["Content-Type"],
+)
 
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
-@app.get("/sensors/latest")
-def sensors_latest():
-    item = db.get_latest()
-    if item is None:
-        raise HTTPException(status_code=404, detail="No data yet")
-    return item
-
-@app.get("/sensors/history")
-def sensors_history(minutes: int = 30):
-    return db.get_history(minutes)
+app.include_router(router)

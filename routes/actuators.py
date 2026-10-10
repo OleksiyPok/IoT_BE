@@ -9,7 +9,7 @@ from iot_client import send_led_command
 
 
 class LedCommand(BaseModel):
-    value: Literal["on", "off"]
+    value: Literal["on", "off", "toggle"]
 
 
 router = APIRouter(

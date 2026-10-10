@@ -15,6 +15,6 @@ iot = boto3.client("iot-data")
 def send_led_command(value: str):
     payload = json.dumps(
         {"action": "set", "value": value},
-        separators=(",", ":"),  # без пробілів — коротший payload
+        separators=(",", ":"),
     )
     iot.publish(topic=TOPIC_CMD, qos=1, payload=payload)

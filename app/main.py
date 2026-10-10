@@ -1,11 +1,11 @@
-# BE/main.py
+# app/main.py
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
-from router import router
+from app.router import router
 
 app = FastAPI(
     title="IoT Backend",

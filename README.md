@@ -1,198 +1,172 @@
-# Заняття 12 — FastAPI: читаємо телеметрію з хмари
+# IoT Backend
 
-Продовження Заняття 11. Дані з ESP32 вже лежать у DynamoDB — їх туди кладе
-Rules Engine без жодного рядка бекенду. Тепер пишемо цей бекенд: маленький
-REST API на FastAPI, який читає таблицю і віддає JSON. Це та сама «труба»,
-тільки тепер із краном на кінці.
+A small FastAPI service for reading ESP32 sensor telemetry from Amazon DynamoDB and sending LED commands through AWS IoT Core.
 
----
+## 1. Requirements
 
-## Архітектура
+- Python 3.10 or newer
+- An AWS account with the resources listed below
+- AWS credentials authorized to access those resources
 
-```
-┌──────────────┐
-│  ESP32       │  Wokwi
-│  (DHT22 sim) │
-└──────┬───────┘
-       │ MQTT over TLS → AWS IoT Core → Rules Engine (Заняття 10-11)
-       ▼
-┌───────────────────┐
-│  DynamoDB         │
-│  iot_telemetry    │
-│  pk: device_id    │
-│  sk: received_at  │
-└──────┬────────────┘
-       │ boto3 query (читання)
-       ▼
-┌───────────────────┐        GET /health
-│  FastAPI          │  ←──   GET /sensors/latest
-│  uvicorn :8000    │        GET /sensors/history?minutes=30
-└───────────────────┘
-       │
-       ▼
- Заняття 13: Grafana
-```
+## 2. Run locally
 
-**Ключова ідея:** пристрій і бекенд не знають одне про одного. Пристрій пише
-в топік, правило кладе в таблицю, бекенд читає таблицю. Кожна ланка замінюється
-окремо — це і є розв'язана (decoupled) архітектура.
+Run these commands from the backend project directory (the directory containing `requirements.txt`):
 
----
-
-## Параметри цього проєкту
-
-| Що | Значення |
-|---|---|
-| Регіон | `eu-north-1` |
-| Таблиця DynamoDB | `iot_telemetry` (створена на Занятті 11) |
-| `device_id` | `esp32lecture10` |
-| Порт API | `8000` (uvicorn за замовчуванням) |
-
----
-
-## Структура проєкту
-
-```
-main.py           — FastAPI-застосунок і ендпоінти
-db.py             — робота з DynamoDB (boto3)
-requirements.txt  — залежності Python
-.env              — AWS-ключі та конфігурація (У .gitignore!)
-.env.example      — шаблон .env для копіювання
-```
-
----
-
-## Налаштування .env
-
-`.env` містить AWS-ключі і **до git не потрапляє** (у `.gitignore`).
-
-1. Скопіювати `.env.example` → `.env`.
-2. Вписати свої значення:
-
-| Змінна | Що це |
-|---|---|
-| `AWS_ACCESS_KEY_ID` | ключ IAM-користувача з правом читати таблицю |
-| `AWS_SECRET_ACCESS_KEY` | секретна частина ключа |
-| `AWS_DEFAULT_REGION` | регіон таблиці — `eu-north-1` |
-| `TABLE_NAME` | `iot_telemetry` |
-| `DEVICE_ID` | `esp32lecture10` — partition key, за яким робимо query |
-
-Принцип найменших привілеїв — той самий, що на Заняттях 9 і 11: цьому
-користувачу достатньо `dynamodb:Query` на одну таблицю. Не давайте йому
-AdministratorAccess «щоб працювало».
-
-> `load_dotenv()` у `main.py` викликається **до** `import db` — бо `db.py`
-> читає змінні середовища прямо при імпорті. Поміняєте порядок — отримаєте
-> підключення до регіону `None`.
-
----
-
-## Залежності
-
-```
-fastapi
-uvicorn
-boto3
-python-dotenv
-```
-
-Повний список із версіями — у `requirements.txt`.
-
----
-
-## Як запустити
-
-```powershell
+```bash
 python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-uvicorn main:app --reload
 ```
 
-Або через FastAPI CLI (той самий uvicorn з `--reload` під капотом):
+Activate the virtual environment:
 
+**Windows PowerShell**
 ```powershell
-fastapi dev main.py
+.\.venv\Scripts\Activate.ps1
 ```
 
-Відкрити http://127.0.0.1:8000/docs — FastAPI сам генерує інтерактивну
-документацію (Swagger UI). Кожен ендпоінт можна викликати прямо звідти.
+**macOS/Linux**
+```bash
+source .venv/bin/activate
+```
 
----
+Install dependencies:
+```bash
+python -m pip install fastapi uvicorn boto3 python-dotenv
+```
 
-## Ендпоінти
+Create a local `.env` file by copying `.env.example`, then fill in the required values. Do not commit `.env` or real credentials to source control.
 
-| Метод | Шлях | Що повертає |
-|---|---|---|
-| GET | `/health` | `{"status": "ok"}` — живий чи ні |
-| GET | `/sensors/latest` | останній запис пристрою; `404`, якщо даних ще немає |
-| GET | `/sensors/history?minutes=30` | записи за останні N хвилин (за замовчуванням 30) |
+Start the API:
+```bash
+uvicorn app.main:app --reload
+```
 
-### Як влаштовані запити (db.py)
+Local URLs:
 
-**`get_latest()`** — query у партицію пристрою, `ScanIndexForward=False`
-(найновіші згори), `Limit=1`. DynamoDB читає рівно один item — це і швидко,
-і дешево.
+- Swagger UI: http://127.0.0.1:8000/docs
+- OpenAPI schema: http://127.0.0.1:8000/openapi.json
+- Health check: http://127.0.0.1:8000/test/health
 
-**`get_history(minutes)`** — query по діапазону sort key:
-`device_id = ... AND received_at >= cutoff`. Межа рахується в **мілісекундах**
-(`time.time() * 1000`), бо `received_at` записаний правилом через
-`timestamp()` — а він у мілісекундах (Заняття 11).
+A successful health check returns `{"status":"ok"}`. This endpoint checks that the API process is running; it does not verify AWS access.
 
-**Чому query, а не scan:** query йде точно в партицію по ключу і читає тільки
-потрібне. Scan перечитує всю таблицю і фільтрує потім — на великій таблиці це
-повільно і дорого. Ключ таблиці будувався саме під ці запити ще на Занятті 11.
+## 3. Environment variables and credentials
 
----
+Copy `.env.example` to `.env` and configure:
 
-## Troubleshooting
-
-| Симптом | Куди дивитись |
+| Variable | Purpose |
 |---|---|
-| `Unable to locate credentials` | `.env` не скопійований або `load_dotenv()` після `import db` |
-| `ResourceNotFoundException` | не той регіон у `AWS_DEFAULT_REGION` або не та назва таблиці |
-| `AccessDeniedException` | IAM-користувач не має `dynamodb:Query` на таблицю |
-| `/sensors/latest` → 404 | таблиця порожня — запустіть пристрій (Заняття 11) |
-| `/sensors/history` → `[]` | дані є, але старіші за N хвилин — збільшіть `minutes` |
-| Сервер не стартує | активуйте `.venv` і перевірте `pip install -r requirements.txt` |
+| `AWS_ACCESS_KEY_ID` | AWS access key ID for the local development/test identity, if using static credentials |
+| `AWS_SECRET_ACCESS_KEY` | Secret key for that identity; keep it private |
+| `AWS_DEFAULT_REGION` | AWS region containing the resources; the example uses `eu-central-1` |
+| `TABLE_NAME` | DynamoDB table name, e.g. `iot_telemetry` |
+| `DEVICE_ID` | Device identifier used to filter telemetry, e.g. `esp32_7898` |
+| `IOT_USER` | AWS IoT topic user segment; set to `OleksiiPok` for the current device/topic |
 
----
+Example `.env`:
+```dotenv
+AWS_ACCESS_KEY_ID=your_access_key_id
+AWS_SECRET_ACCESS_KEY=your_secret_access_key
+AWS_DEFAULT_REGION=eu-central-1
+TABLE_NAME=iot_telemetry
+DEVICE_ID=esp32_7898
+IOT_USER=OleksiiPok
+```
 
-## Ключові факти заняття
+Use a dedicated, least-privilege IAM identity for local development. On AWS-hosted compute, prefer an IAM role instead of long-lived access keys. If credentials are supplied through an AWS profile or role, configure that identity using the standard AWS credential chain.
 
-- Бекенд **читає** ту саму таблицю, куди **пише** Rules Engine — і вони
-  нічого не знають одне про одного
-- Query — точковий удар по ключу. Scan — перечитати все. Ключ будувався під query
-- `received_at` — мілісекунди, `timestamp` із пристрою — секунди. Не плутати
-- `.env` до git не потрапляє. Ключі, що потрапили в git, вважаються скомпрометованими
-- FastAPI генерує `/docs` сам — це безкоштовний інструмент перевірки API
-- **Пристрій дає дані — хмара дає гарантії — бекенд дає доступ**
+The LED command topic is built in `app/services/commands_service.py` from `IOT_USER`:
 
----
+```python
+TOPIC_CMD = "iot-course/{IOT_USER}/commands/led"
+```
 
-## Рекомендована література
+With `IOT_USER=OleksiiPok`, the resulting topic is:
+```text
+iot-course/OleksiiPok/commands/led
+```
 
-### FastAPI
+The `IOT_USER` value must match the user/device segment expected by the AWS IoT topic and the receiving device.
 
-- Офіційна документація — [fastapi.tiangolo.com](https://fastapi.tiangolo.com/)
-- Tutorial (User Guide) — [fastapi.tiangolo.com/tutorial](https://fastapi.tiangolo.com/tutorial/)
+## 4. AWS resources
 
-### AWS IAM
+### DynamoDB
 
-- Керування access keys — [docs.aws.amazon.com/IAM/…/id_credentials_access-keys](https://docs.aws.amazon.com/IAM/latest/UserGuide/id_credentials_access-keys.html)
-- Політики й дозволи (least privilege) — [docs.aws.amazon.com/IAM/…/access_policies](https://docs.aws.amazon.com/IAM/latest/UserGuide/access_policies.html)
+The service reads from the table named by `TABLE_NAME`.
 
-### boto3 / DynamoDB
+The code expects a table with a partition key named `device_id` and a sort key named `received_at`. The `received_at` values must be numeric millisecond timestamps because the history endpoint queries a numeric range.
 
-- boto3 Table.query — [boto3.amazonaws.com/…/dynamodb/table/query](https://boto3.amazonaws.com/v1/documentation/api/latest/reference/services/dynamodb/table/query.html)
-- Query vs Scan (key conditions) — [docs.aws.amazon.com/…/Query.KeyConditionExpressions](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Query.KeyConditionExpressions.html)
+- `GET /sensors/latest` returns the newest item for `DEVICE_ID`.
+- `GET /sensors/history?from_ms=<start>&to_ms=<end>` returns items for that device in the inclusive timestamp range.
 
-### Копни глибше (по бажанню)
+If the table has no matching items, `/sensors/latest` returns HTTP `404`.
 
-- **Pydantic response models** — типізована відповідь endpoint замість голого dict
-- **def vs async def** — чому з синхронним boto3 беремо `def` (FastAPI винесе в threadpool)
-- **boto3 credential chain** — у якому порядку шукаються ключі: env → `~/.aws` → IAM-роль
-- **Пагінація DynamoDB** (`LastEvaluatedKey`) — коли історія не влазить у 1 MB
-- **/redoc** — друга авто-документація поряд зі Swagger `/docs`
+### AWS IoT Core
 
----
+`POST /actuators/led` publishes a JSON command to the topic configured through `IOT_USER`, using QoS 1. Request body:
+
+```json
+{"value":"on"}
+```
+
+Allowed `value` values are `on`, `off`, and `toggle`. The published payload has this shape:
+
+```json
+{"action":"set","value":"on"}
+```
+
+The endpoint returns `{"accepted":true,"value":"on"}` if the publish call succeeds. This confirms that AWS accepted the publish request; it does not confirm that the device received or executed the command.
+
+**AWS IoT endpoint note:** the current code creates `boto3.client("iot-data")` without an explicit account-specific IoT data endpoint URL. AWS IoT Data Plane operations commonly require the account's data endpoint. If publishing fails with an endpoint/connection error, retrieve the endpoint for the correct account and region and update the client configuration in `app/services/commands_service.py`.
+
+## 5. IAM permissions
+
+Grant the runtime identity only the permissions needed for the configured resources. Replace `<region>`, `<account-id>`, and `<table-name>` with the actual values.
+
+### DynamoDB read access
+
+Allow `dynamodb:Query` on the telemetry table:
+
+`arn:aws:dynamodb:<region>:<account-id>:table/<table-name>`
+
+The current implementation uses `Query`; it does not require `dynamodb:Scan` or write permissions.
+
+### AWS IoT publish access
+
+Allow `iot:Publish` on the exact command topic generated from `IOT_USER`.
+
+For `IOT_USER=OleksiiPok`, the resource ARN is:
+
+`arn:aws:iot:<region>:<account-id>:topic/iot-course/OleksiiPok/commands/led`
+
+If `IOT_USER` changes, update the IAM policy resource ARN to match the resulting topic. The service does not need IoT subscribe or receive permissions to publish this command.
+
+### Credential setup
+
+For local development, the IAM user's access keys must belong to an identity with the permissions above. For deployment on AWS, attach the equivalent policy to the workload's IAM role. Do not place credentials in source code, commit them, or share them in test reports.
+
+## 6. API quick reference
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/test/health` | Check API process health |
+| `GET` | `/sensors/latest` | Read the latest telemetry item for `DEVICE_ID` |
+| `GET` | `/sensors/history?from_ms=<start>&to_ms=<end>` | Read telemetry within a timestamp range |
+| `POST` | `/actuators/led` | Publish an LED command to AWS IoT Core |
+
+Example request using curl:
+```bash
+curl -X POST "http://127.0.0.1:8000/actuators/led" \
+  -H "Content-Type: application/json" \
+  -d '{"value":"toggle"}'
+```
+
+## 7. Troubleshooting
+
+- **HTTP 404 from `/sensors/latest`:** the table has no telemetry item for `DEVICE_ID` yet, or the configured device ID does not match.
+- **HTTP 502 from a sensor endpoint:** check AWS credentials, region, table name, IAM `dynamodb:Query` permission, and the table key schema.
+- **HTTP 502 from `/actuators/led`:** check AWS credentials, region, IAM `iot:Publish` permission, the topic generated from `IOT_USER`, and the IoT Data Plane endpoint configuration.
+- **HTTP 422 from `/sensors/history`:** ensure `from_ms` and `to_ms` are non-negative integers and `from_ms <= to_ms`.
+
+## Notes for maintainers
+
+- CORS is currently configured to allow all origins, with only `GET` and `POST` methods and the `Content-Type` header. Review this before exposing the service beyond a controlled development environment.
+- The provided `requirements.txt` is empty in the supplied archive. The installation command above installs the dependencies imported by the current source files; maintainers should populate and pin `requirements.txt` for reproducible builds.

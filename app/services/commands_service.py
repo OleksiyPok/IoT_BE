@@ -1,13 +1,18 @@
-# BE/iot_client.py
+# app/services/commands_service.py
 
 import json
+import os
 
 import boto3
 from dotenv import load_dotenv
 
 load_dotenv()
 
-TOPIC_CMD = "iot-course/demo/commands/led"
+IOT_USER = os.getenv("IOT_USER")
+if not IOT_USER:
+    raise ValueError("IOT_USER is not set in the .env file")
+
+TOPIC_CMD = f"iot-course/{IOT_USER}/commands/led"
 
 iot = boto3.client("iot-data")
 

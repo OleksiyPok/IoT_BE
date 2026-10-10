@@ -1,4 +1,4 @@
-# BE/routes/tests.py
+# app/routes/tests.py
 
 from fastapi import APIRouter, status
 

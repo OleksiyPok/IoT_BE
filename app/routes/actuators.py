@@ -1,15 +1,17 @@
-# BE/routes/actuators.py
+# app/routes/actuators.py
 
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
-from iot_client import send_led_command
+from app.services.commands_service import send_led_command
 
 
 class LedCommand(BaseModel):
-    value: Literal["on", "off", "toggle"]
+    value: Literal["on", "off", "toggle"] = Field(
+        json_schema_extra={"examples": ["toggle"]}
+    )
 
 
 router = APIRouter(

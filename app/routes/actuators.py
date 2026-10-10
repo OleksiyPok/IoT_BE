@@ -24,7 +24,7 @@ router = APIRouter(
     "/led",
     summary="Send LED command",
     description="Send a command to change the LED state.",
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 def set_led(cmd: LedCommand):
     try:

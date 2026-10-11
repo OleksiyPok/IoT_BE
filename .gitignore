@@ -1,5 +1,5 @@
 .env
 .venv
-.scripts
+scripts
+tools
 __pycache__
-

@@ -4,6 +4,9 @@ from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from pathlib import Path
+from fastapi.responses import FileResponse
+
 load_dotenv()
 from app.router import router
 
@@ -13,6 +16,7 @@ app = FastAPI(
         "docExpansion": "none",
     },
 )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],  # демо; у проді — список
@@ -20,5 +24,13 @@ app.add_middleware(
     allow_methods=["GET", "POST"],  # default — only GET
     allow_headers=["Content-Type"],
 )
+
+
+STATIC_DIR = Path(__file__).parent / "static"
+
+
+@app.get("/", include_in_schema=False)
+async def index():
+    return FileResponse(STATIC_DIR / "led_control.html")
 
 app.include_router(router)

@@ -2,11 +2,11 @@
 
 from typing import Literal
 
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
-from botocore.exceptions import BotoCoreError, ClientError
 
-from app.services.commands_service import send_led_command
+from app.services.commands_service import publish_led_command
 
 
 class LedCommand(BaseModel):
@@ -27,9 +27,9 @@ router = APIRouter(
     description="Publish a command to change the LED state.",
     status_code=status.HTTP_202_ACCEPTED,
 )
-def set_led(cmd: LedCommand):
+def send_led_command_route(cmd: LedCommand):
     try:
-        send_led_command(cmd.value)
+        publish_led_command(cmd.value)
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

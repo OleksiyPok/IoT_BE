@@ -17,7 +17,7 @@ TOPIC_CMD = f"iot-course/{IOT_USER}/commands/led"
 iot = boto3.client("iot-data")
 
 
-def send_led_command(value: str):
+def publish_led_command(value: str):
     """Publish an LED command to AWS IoT Core."""
     payload = json.dumps(
         {"action": "set", "value": value},

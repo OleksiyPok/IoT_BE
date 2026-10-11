@@ -1,9 +1,14 @@
 # app/routes/events.py
+import time
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.services.events_service import get_history, get_latest, get_n_records
+from app.services.events_service import (
+    get_event_history,
+    get_latest_event,
+    get_recent_events,
+)
 
 router = APIRouter(
     prefix="/events",
@@ -13,13 +18,13 @@ router = APIRouter(
 
 @router.get(
     "/latest",
-    summary="Get latest event",
-    description="Retrieve the most recent event.",
+    summary="Get the latest event",
+    description="Retrieve the single most recent event.",
     status_code=status.HTTP_200_OK,
 )
-def events_latest():
+def get_latest_event_route():
     try:
-        item = get_latest()
+        item = get_latest_event()
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
@@ -29,10 +34,49 @@ def events_latest():
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No events found",
+            detail="No event found",
         )
 
     return item
+
+
+@router.get(
+    "/last-hours",
+    summary="Get events from the last hours",
+    description="Retrieve events from the specified number of past hours.",
+    status_code=status.HTTP_200_OK,
+)
+def get_events_last_hours(
+    hours: int = Query(gt=0, le=24),
+):
+    now_ms = int(time.time() * 1000)
+    from_ms = now_ms - hours * 60 * 60 * 1000
+
+    try:
+        return get_event_history(from_ms, now_ms)
+    except (BotoCoreError, ClientError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to retrieve event history from AWS",
+        )
+
+
+@router.get(
+    "/last-count",
+    summary="Get the last events",
+    description="Retrieve the specified number of most recent events.",
+    status_code=status.HTTP_200_OK,
+)
+def get_events_last_count(
+    count: int = Query(ge=1),
+):
+    try:
+        return get_recent_events(count)
+    except (BotoCoreError, ClientError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to retrieve event history from AWS",
+        )
 
 
 @router.get(
@@ -41,7 +85,7 @@ def events_latest():
     description="Retrieve events within the specified time range.",
     status_code=status.HTTP_200_OK,
 )
-def events_history(
+def get_event_history_route(
     from_ms: int = Query(ge=0),
     to_ms: int = Query(ge=0),
 ):
@@ -52,27 +96,9 @@ def events_history(
         )
 
     try:
-        return get_history(from_ms, to_ms)
+        return get_event_history(from_ms, to_ms)
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to retrieve event history from AWS",
-        )
-
-
-@router.get(
-    "/history/recent",
-    summary="Get latest N events",
-    description="Retrieve the specified number of most recent events.",
-    status_code=status.HTTP_200_OK,
-)
-def events_n_history(
-    n_events: int = Query(ge=1),
-):
-    try:
-        return get_n_records(n_events)
-    except (BotoCoreError, ClientError):
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to retrieve events history from AWS",
         )

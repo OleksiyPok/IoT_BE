@@ -10,6 +10,6 @@ from app.routes.tests import router as test_router
 router = APIRouter()
 
 router.include_router(telemetry_router)
-router.include_router(actuators_router)
 router.include_router(events_router)
+router.include_router(actuators_router)
 router.include_router(test_router)

@@ -15,7 +15,7 @@ DEVICE_ID = os.getenv("DEVICE_ID")
 table = dynamodb.Table(TABLE_NAME)
 
 
-def get_latest():
+def get_latest_sensor():
     """Return the most recent sensor reading."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID),
@@ -26,10 +26,11 @@ def get_latest():
     return items[0] if items else None
 
 
-def get_history(from_ms, to_ms):
+def get_sensor_history(from_ms, to_ms):
     """Return sensor readings within the specified time range."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID)
         & Key("received_at").between(from_ms, to_ms),
     )
     return response["Items"]
+

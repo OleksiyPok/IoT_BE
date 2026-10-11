@@ -14,7 +14,7 @@ DEVICE_ID = os.getenv("DEVICE_ID")
 table = dynamodb.Table(TABLE_NAME)
 
 
-def get_latest():
+def get_latest_event():
     """Return the most recent event."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID),
@@ -25,7 +25,7 @@ def get_latest():
     return items[0] if items else None
 
 
-def get_history(from_ms, to_ms):
+def get_event_history(from_ms, to_ms):
     """Return events within the specified time range."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID)
@@ -34,7 +34,7 @@ def get_history(from_ms, to_ms):
     return response["Items"]
 
 
-def get_n_records(n_events):
+def get_recent_events(n_events):
     """Return the specified number of most recent events."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID),

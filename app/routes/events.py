@@ -14,7 +14,7 @@ router = APIRouter(
 @router.get(
     "/latest",
     summary="Get latest event",
-    description="Retrieve the last event.",
+    description="Retrieve the most recent event.",
     status_code=status.HTTP_200_OK,
 )
 def events_latest():
@@ -23,13 +23,13 @@ def events_latest():
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to retrieve events readings from AWS",
+            detail="Failed to retrieve event data from AWS",
         )
 
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No data yet",
+            detail="No events found",
         )
 
     return item
@@ -37,8 +37,8 @@ def events_latest():
 
 @router.get(
     "/history",
-    summary="Get events history.",
-    description="Retrieve historical events readings.",
+    summary="Get event history",
+    description="Retrieve events within the specified time range.",
     status_code=status.HTTP_200_OK,
 )
 def events_history(
@@ -56,26 +56,19 @@ def events_history(
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to retrieve sensor history from AWS",
+            detail="Failed to retrieve event history from AWS",
         )
 
 
-
 @router.get(
-    "/",
-    summary="Get N events history .",
-    description="Retrieve N historical events readings.",
+    "/history/recent",
+    summary="Get latest N events",
+    description="Retrieve the specified number of most recent events.",
     status_code=status.HTTP_200_OK,
 )
 def events_n_history(
     n_events: int = Query(ge=1),
 ):
-    if n_events < 1:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="The number of records requested must be greater than zero.",
-        )
-
     try:
         return get_n_records(n_events)
     except (BotoCoreError, ClientError):

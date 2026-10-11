@@ -1,5 +1,7 @@
 # app/routes/sensors.py
 
+import time
+
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Query, status
 
@@ -13,8 +15,8 @@ router = APIRouter(
 
 @router.get(
     "/latest",
-    summary="Get latest sensor readings",
-    description="Retrieve the most recent sensor readings.",
+    summary="Get latest sensor reading",
+    description="Retrieve the most recent sensor reading.",
     status_code=status.HTTP_200_OK,
 )
 def sensors_latest():
@@ -23,13 +25,13 @@ def sensors_latest():
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to retrieve sensor readings from AWS",
+            detail="Failed to retrieve sensor data from AWS",
         )
 
     if item is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="No data yet",
+            detail="No sensor data found",
         )
 
     return item
@@ -38,7 +40,7 @@ def sensors_latest():
 @router.get(
     "/history",
     summary="Get sensor reading history",
-    description="Retrieve historical sensor readings.",
+    description="Retrieve sensor readings within the specified time range.",
     status_code=status.HTTP_200_OK,
 )
 def sensors_history(
@@ -56,5 +58,26 @@ def sensors_history(
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail="Failed to retrieve sensor history from AWS",
+            detail="Failed to retrieve sensor data from AWS",
+        )
+
+
+@router.get(
+    "/history/hours",
+    summary="Get sensor readings for the last N hours",
+    description="Retrieve sensor readings from the specified number of past hours.",
+    status_code=status.HTTP_200_OK,
+)
+def sensors_history_hours(
+    hours: int = Query(gt=0),
+):
+    now_ms = int(time.time() * 1000)
+    from_ms = now_ms - hours * 60 * 60 * 1000
+
+    try:
+        return get_history(from_ms, now_ms)
+    except (BotoCoreError, ClientError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to retrieve sensor data from AWS",
         )

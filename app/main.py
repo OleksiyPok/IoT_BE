@@ -1,10 +1,10 @@
 # app/main.py
 
+from pathlib import Path
+
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from pathlib import Path
 from fastapi.responses import FileResponse
 
 load_dotenv()
@@ -32,5 +32,6 @@ STATIC_DIR = Path(__file__).parent / "static"
 @app.get("/", include_in_schema=False)
 async def index():
     return FileResponse(STATIC_DIR / "led_control.html")
+
 
 app.include_router(router)

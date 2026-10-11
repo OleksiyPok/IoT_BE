@@ -6,7 +6,7 @@ import time
 import boto3
 from boto3.dynamodb.conditions import Key
 
-# Connect to DynamoDB
+# Initialize DynamoDB resource and telemetry table.
 dynamodb = boto3.resource("dynamodb", region_name=os.getenv("AWS_DEFAULT_REGION"))
 
 TABLE_NAME = os.getenv("TELEMETRY_TABLE_NAME")
@@ -16,7 +16,7 @@ table = dynamodb.Table(TABLE_NAME)
 
 
 def get_latest():
-    """Latest measurements"""
+    """Return the most recent sensor reading."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID),
         ScanIndexForward=False,
@@ -27,7 +27,7 @@ def get_latest():
 
 
 def get_history(from_ms, to_ms):
-    """Measurements for the selected period"""
+    """Return sensor readings within the specified time range."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID)
         & Key("received_at").between(from_ms, to_ms),

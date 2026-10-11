@@ -18,6 +18,7 @@ iot = boto3.client("iot-data")
 
 
 def send_led_command(value: str):
+    """Publish an LED command to AWS IoT Core."""
     payload = json.dumps(
         {"action": "set", "value": value},
         separators=(",", ":"),

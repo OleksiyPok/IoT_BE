@@ -5,7 +5,7 @@ import os
 import boto3
 from boto3.dynamodb.conditions import Key
 
-# Connect to DynamoDB
+# Initialize DynamoDB resource and events table.
 dynamodb = boto3.resource("dynamodb", region_name=os.getenv("AWS_DEFAULT_REGION"))
 
 TABLE_NAME = os.getenv("EVENTS_TABLE_NAME")
@@ -15,7 +15,7 @@ table = dynamodb.Table(TABLE_NAME)
 
 
 def get_latest():
-    """Latest event"""
+    """Return the most recent event."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID),
         ScanIndexForward=False,
@@ -26,7 +26,7 @@ def get_latest():
 
 
 def get_history(from_ms, to_ms):
-    """Events for the selected period"""
+    """Return events within the specified time range."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID)
         & Key("received_at").between(from_ms, to_ms),
@@ -35,7 +35,7 @@ def get_history(from_ms, to_ms):
 
 
 def get_n_records(n_events):
-    """The specified number of event records."""
+    """Return the specified number of most recent events."""
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID),
         ScanIndexForward=False,

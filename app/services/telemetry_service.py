@@ -9,7 +9,7 @@ from boto3.dynamodb.conditions import Key
 # Connect to DynamoDB
 dynamodb = boto3.resource("dynamodb", region_name=os.getenv("AWS_DEFAULT_REGION"))
 
-TABLE_NAME = os.getenv("TABLE_NAME")
+TABLE_NAME = os.getenv("TELEMETRY_TABLE_NAME")
 DEVICE_ID = os.getenv("DEVICE_ID")
 
 table = dynamodb.Table(TABLE_NAME)

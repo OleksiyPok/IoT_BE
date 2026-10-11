@@ -1,7 +1,6 @@
 # app/services/events_service.py
 
 import os
-import time
 
 import boto3
 from boto3.dynamodb.conditions import Key
@@ -31,5 +30,15 @@ def get_history(from_ms, to_ms):
     response = table.query(
         KeyConditionExpression=Key("device_id").eq(DEVICE_ID)
         & Key("received_at").between(from_ms, to_ms),
+    )
+    return response["Items"]
+
+
+def get_n_records(n_events):
+    """The specified number of event records."""
+    response = table.query(
+        KeyConditionExpression=Key("device_id").eq(DEVICE_ID),
+        ScanIndexForward=False,
+        Limit=n_events,
     )
     return response["Items"]

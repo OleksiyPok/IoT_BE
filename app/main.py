@@ -11,7 +11,7 @@ load_dotenv()
 from app.router import router
 
 app = FastAPI(
-    title="IoT Backend",
+    title="IoT Backend (Oleksii Pokormiakho)",
     swagger_ui_parameters={
         "docExpansion": "none",
     },

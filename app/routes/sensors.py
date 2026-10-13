@@ -5,7 +5,11 @@ import time
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.services.telemetry_service import get_latest_sensor, get_sensor_history
+from app.services.telemetry_service import (
+    get_latest_sensor,
+    get_recent_sensors,
+    get_sensor_history,
+)
 
 router = APIRouter(
     prefix="/sensors",
@@ -67,11 +71,13 @@ def get_sensor_readings_last_hours(
 def get_sensor_readings_last_count(
     count: int = Query(ge=1),
 ):
-    # Not implemented: the service must support a limited query.
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Retrieving a limited number of sensor readings is not implemented",
-    )
+    try:
+        return get_recent_sensors(count)
+    except (BotoCoreError, ClientError):
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to retrieve sensor data from AWS",
+        )
 
 
 @router.get(

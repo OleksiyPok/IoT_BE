@@ -34,3 +34,11 @@ def get_sensor_history(from_ms, to_ms):
     )
     return response["Items"]
 
+def get_recent_sensors(count):
+    """Return the specified number of most recent sensor readings."""
+    response = table.query(
+        KeyConditionExpression=Key("device_id").eq(DEVICE_ID),
+        ScanIndexForward=False,
+        Limit=count,
+    )
+    return response["Items"]

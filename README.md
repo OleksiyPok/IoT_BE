@@ -1,172 +1,307 @@
 # IoT Backend
 
-A small FastAPI service for reading ESP32 sensor telemetry from Amazon DynamoDB and sending LED commands through AWS IoT Core.
+[English](README/README.en.md) | [Українська](README/README.uk.md)
+
+FastAPI backend for retrieving ESP32 telemetry and event records from Amazon DynamoDB and publishing LED commands through AWS IoT Core.
+
+- **API documentation:** `http://127.0.0.1:8000/docs`
+- **OpenAPI schema:** `http://127.0.0.1:8000/openapi.json`
+- **Web LED control page:** `http://127.0.0.1:8000/`
+- **Health check:** `http://127.0.0.1:8000/test/health`
 
 ## 1. Requirements
 
-- Python 3.10 or newer
-- An AWS account with the resources listed below
-- AWS credentials authorized to access those resources
+- Python 3.10 or newer.
+- An AWS account and access to the project's AWS resources.
+- AWS credentials with the permissions described in [AWS configuration and permissions](#4-aws-configuration-and-permissions).
+- The DynamoDB tables and AWS IoT Core topic used by the device must already exist and match the configuration below.
 
-## 2. Run locally
+## 2. Run on another computer
 
-Run these commands from the backend project directory (the directory containing `requirements.txt`):
+Run all commands from the backend project root—the directory containing `app/` and `.env.example`.
 
-```bash
-python -m venv .venv
-```
+### Windows PowerShell
 
-Activate the virtual environment:
-
-**Windows PowerShell**
 ```powershell
+py -m venv .venv
 .\.venv\Scripts\Activate.ps1
-```
-
-**macOS/Linux**
-```bash
-source .venv/bin/activate
-```
-
-Install dependencies:
-```bash
 python -m pip install fastapi uvicorn boto3 python-dotenv
+Copy-Item .env.example .env
 ```
 
-Create a local `.env` file by copying `.env.example`, then fill in the required values. Do not commit `.env` or real credentials to source control.
+### macOS / Linux
 
-Start the API:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install fastapi uvicorn boto3 python-dotenv
+cp .env.example .env
+```
+
+Edit `.env` as described in the next section, then start the API:
+
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Local URLs:
+Open `http://127.0.0.1:8000/docs` to explore and call the endpoints.
 
-- Swagger UI: http://127.0.0.1:8000/docs
-- OpenAPI schema: http://127.0.0.1:8000/openapi.json
-- Health check: http://127.0.0.1:8000/test/health
+To stop the server, press `Ctrl+C`.
 
-A successful health check returns `{"status":"ok"}`. This endpoint checks that the API process is running; it does not verify AWS access.
+> The supplied archive does not contain a populated `requirements.txt`. The installation commands above install the direct Python dependencies used by the application. For repeatable installation, maintain a `requirements.txt` with pinned versions.
 
-## 3. Environment variables and credentials
+## 3. Environment configuration
 
-Copy `.env.example` to `.env` and configure:
+Create `.env` from `.env.example` and configure it for your AWS account and device.
 
 | Variable | Purpose |
 |---|---|
-| `AWS_ACCESS_KEY_ID` | AWS access key ID for the local development/test identity, if using static credentials |
-| `AWS_SECRET_ACCESS_KEY` | Secret key for that identity; keep it private |
-| `AWS_DEFAULT_REGION` | AWS region containing the resources; the example uses `eu-central-1` |
-| `TABLE_NAME` | DynamoDB table name, e.g. `iot_telemetry` |
-| `DEVICE_ID` | Device identifier used to filter telemetry, e.g. `esp32_7898` |
-| `IOT_USER` | AWS IoT topic user segment; set to `OleksiiPok` for the current device/topic |
+| `AWS_ACCESS_KEY_ID` | AWS access key ID for local development, if using static credentials. |
+| `AWS_SECRET_ACCESS_KEY` | Secret key paired with the access key. Keep it private. |
+| `AWS_DEFAULT_REGION` | AWS region containing the DynamoDB tables and IoT resources. The example uses `eu-central-1` (Frankfurt). |
+| `TELEMETRY_TABLE_NAME` | Name of the DynamoDB table containing sensor telemetry. |
+| `EVENTS_TABLE_NAME` | Name of the DynamoDB table containing device events. |
+| `DEVICE_ID` | Device identifier used to select records from both tables. It must match the `device_id` stored in DynamoDB. |
+| `IOT_USER` | User/device segment used to build the LED command topic. It must match the topic expected by the ESP32 and AWS IoT policies. |
 
-Example `.env`:
+Example:
+
 ```dotenv
 AWS_ACCESS_KEY_ID=your_access_key_id
 AWS_SECRET_ACCESS_KEY=your_secret_access_key
 AWS_DEFAULT_REGION=eu-central-1
-TABLE_NAME=iot_telemetry
-DEVICE_ID=esp32_7898
-IOT_USER=OleksiiPok
+TELEMETRY_TABLE_NAME=iot_telemetry
+EVENTS_TABLE_NAME=iot_events
+DEVICE_ID=your_actual_device_id
+IOT_USER=your_topic_user
 ```
 
-Use a dedicated, least-privilege IAM identity for local development. On AWS-hosted compute, prefer an IAM role instead of long-lived access keys. If credentials are supplied through an AWS profile or role, configure that identity using the standard AWS credential chain.
+Replace all example credentials and identifiers with the actual values.
 
-The LED command topic is built in `app/services/commands_service.py` from `IOT_USER`:
+Do not commit `.env` or share its secrets.
 
-```python
-TOPIC_CMD = "iot-course/{IOT_USER}/commands/led"
-```
+For local development, use a dedicated IAM identity with least-privilege permissions. If credentials are already provided through an AWS profile or another supported AWS credential source, the static access-key variables may be omitted.
 
-With `IOT_USER=OleksiiPok`, the resulting topic is:
+On AWS-hosted compute, prefer an IAM role over long-lived access keys.
+
+## 4. AWS configuration and permissions
+
+### 4.1. DynamoDB tables
+
+The application reads from two separate tables:
+
+- `TELEMETRY_TABLE_NAME` — sensor telemetry.
+- `EVENTS_TABLE_NAME` — device events.
+
+The code expects each table to have the following key schema:
+
+- Partition key: `device_id`
+- Sort key: `received_at`
+
+`device_id` must match `DEVICE_ID`.
+
+`received_at` must be a numeric Unix timestamp in **milliseconds**. The history endpoints use an inclusive range query on `received_at`.
+
+The application performs DynamoDB `Query` operations. The IAM identity used by the backend needs `dynamodb:Query` permission on both configured tables.
+
+The current code does not require `dynamodb:Scan` or DynamoDB write permissions.
+
+### 4.2. AWS IoT Core
+
+The LED command topic is built in `app/services/commands_service.py`:
+
 ```text
-iot-course/OleksiiPok/commands/led
+iot-course/{IOT_USER}/commands/led
 ```
 
-The `IOT_USER` value must match the user/device segment expected by the AWS IoT topic and the receiving device.
+For example, if `IOT_USER=StudentName`, the topic is:
 
-## 4. AWS resources
-
-### DynamoDB
-
-The service reads from the table named by `TABLE_NAME`.
-
-The code expects a table with a partition key named `device_id` and a sort key named `received_at`. The `received_at` values must be numeric millisecond timestamps because the history endpoint queries a numeric range.
-
-- `GET /sensors/latest` returns the newest item for `DEVICE_ID`.
-- `GET /sensors/history?from_ms=<start>&to_ms=<end>` returns items for that device in the inclusive timestamp range.
-
-If the table has no matching items, `/sensors/latest` returns HTTP `404`.
-
-### AWS IoT Core
-
-`POST /actuators/led` publishes a JSON command to the topic configured through `IOT_USER`, using QoS 1. Request body:
-
-```json
-{"value":"on"}
+```text
+iot-course/StudentName/commands/led
 ```
 
-Allowed `value` values are `on`, `off`, and `toggle`. The published payload has this shape:
+The AWS identity used by the backend needs `iot:Publish` permission on the corresponding topic ARN, for example:
 
-```json
-{"action":"set","value":"on"}
+```text
+arn:aws:iot:eu-central-1:<account-id>:topic/iot-course/StudentName/commands/led
 ```
 
-The endpoint returns `{"accepted":true,"value":"on"}` if the publish call succeeds. This confirms that AWS accepted the publish request; it does not confirm that the device received or executed the command.
+The command publisher currently creates `boto3.client("iot-data")` without an explicit account-specific IoT Data Plane endpoint URL.
 
-**AWS IoT endpoint note:** the current code creates `boto3.client("iot-data")` without an explicit account-specific IoT data endpoint URL. AWS IoT Data Plane operations commonly require the account's data endpoint. If publishing fails with an endpoint/connection error, retrieve the endpoint for the correct account and region and update the client configuration in `app/services/commands_service.py`.
+If command publishing fails with an endpoint or connection error, verify the IoT Data Plane endpoint for the correct AWS account and region. Configure the client in `app/services/commands_service.py` if necessary.
 
-## 5. IAM permissions
+A successful command response means the backend's publish call succeeded. It **does not** prove that the ESP32 received or executed the command.
 
-Grant the runtime identity only the permissions needed for the configured resources. Replace `<region>`, `<account-id>`, and `<table-name>` with the actual values.
+Device-side confirmation requires telemetry, an event, or another acknowledgement mechanism.
 
-### DynamoDB read access
+## 5. API reference
 
-Allow `dynamodb:Query` on the telemetry table:
+The interactive request schemas and response models available to FastAPI are shown in Swagger UI:
 
-`arn:aws:dynamodb:<region>:<account-id>:table/<table-name>`
+`http://127.0.0.1:8000/docs`
 
-The current implementation uses `Query`; it does not require `dynamodb:Scan` or write permissions.
+### 5.1. Health check and web page
 
-### AWS IoT publish access
-
-Allow `iot:Publish` on the exact command topic generated from `IOT_USER`.
-
-For `IOT_USER=OleksiiPok`, the resource ARN is:
-
-`arn:aws:iot:<region>:<account-id>:topic/iot-course/OleksiiPok/commands/led`
-
-If `IOT_USER` changes, update the IAM policy resource ARN to match the resulting topic. The service does not need IoT subscribe or receive permissions to publish this command.
-
-### Credential setup
-
-For local development, the IAM user's access keys must belong to an identity with the permissions above. For deployment on AWS, attach the equivalent policy to the workload's IAM role. Do not place credentials in source code, commit them, or share them in test reports.
-
-## 6. API quick reference
-
-| Method | Endpoint | Purpose |
+| Method and path | Parameters / body | Behavior |
 |---|---|---|
-| `GET` | `/test/health` | Check API process health |
-| `GET` | `/sensors/latest` | Read the latest telemetry item for `DEVICE_ID` |
-| `GET` | `/sensors/history?from_ms=<start>&to_ms=<end>` | Read telemetry within a timestamp range |
-| `POST` | `/actuators/led` | Publish an LED command to AWS IoT Core |
+| `GET /test/health` | None | Returns `{"status":"ok"}` if the API process responds. It does not test AWS credentials or connectivity. |
+| `GET /` | None | Serves the built-in LED control page from `app/static/led_control.html`. |
 
-Example request using curl:
+### 5.2. Sensors — telemetry table
+
+All sensor endpoints read from `TELEMETRY_TABLE_NAME` and filter records by `DEVICE_ID`.
+
+| Method and path | Parameters | Behavior |
+|---|---|---|
+| `GET /sensors/latest` | None | Returns the most recent telemetry record for the configured device. Returns `404` if no record is found. |
+| `GET /sensors/last-count?count=10` | Required `count`, integer `>= 1`. | Returns up to `count` recent telemetry records, ordered by `received_at` from newest to oldest. |
+| `GET /sensors/last-hours?hours=2` | Required `hours`, integer from `1` through `24`. | Returns telemetry for the specified number of preceding hours, calculated using server time. |
+| `GET /sensors/history?from_ms=...&to_ms=...` | Required `from_ms` and `to_ms`: non-negative Unix timestamps in milliseconds; `from_ms <= to_ms`. | Returns telemetry records whose `received_at` falls within the inclusive time range. |
+
+#### Which sensor endpoint should I use?
+
+- **Latest reading:** `/sensors/latest` — retrieves one most recent record.
+- **Fixed number of records:** `/sensors/last-count?count=10` — retrieves up to 10 recent records.
+- **Rolling time interval:** `/sensors/last-hours?hours=2` — retrieves records from the preceding two hours.
+- **Exact time interval:** `/sensors/history?from_ms=...&to_ms=...` — retrieves records within the specified timestamp range.
+
+Use `last-count` when the number of records matters more than their age.
+
+Use `last-hours` when you need a simple rolling time interval without calculating timestamps yourself.
+
+Use `history` when the caller controls the time range, for example through a Grafana time picker.
+
+#### Examples
+
+Latest reading:
+
+```http
+GET http://127.0.0.1:8000/sensors/latest
+```
+
+Last 10 readings:
+
+```http
+GET http://127.0.0.1:8000/sensors/last-count?count=10
+```
+
+Readings from the last two hours:
+
+```http
+GET http://127.0.0.1:8000/sensors/last-hours?hours=2
+```
+
+Readings within a specific time range:
+
+```http
+GET http://127.0.0.1:8000/sensors/history?from_ms=1791741000000&to_ms=1791741600000
+```
+
+### 5.3. Events — events table
+
+All event endpoints read from `EVENTS_TABLE_NAME` and filter records by `DEVICE_ID`.
+
+| Method and path | Parameters | Behavior |
+|---|---|---|
+| `GET /events/latest` | None | Returns the most recent event. Returns `404` if no event is found. |
+| `GET /events/last-count?count=20` | Required `count`, integer `>= 1`. | Returns up to the requested number of newest events. |
+| `GET /events/last-hours?hours=6` | Required `hours`, integer from `1` through `24`. | Returns events from the specified number of preceding hours, calculated using server time. |
+| `GET /events/history?from_ms=...&to_ms=...` | Required `from_ms` and `to_ms`: non-negative Unix timestamps in milliseconds; `from_ms <= to_ms`. | Returns events within the inclusive time range. |
+
+#### Which events endpoint should I use?
+
+- **One newest event:** `/events/latest`.
+- **A fixed number of newest events:** `/events/last-count?count=20`.
+- **A rolling time interval:** `/events/last-hours?hours=6`.
+- **An exact time interval:** `/events/history?from_ms=...&to_ms=...`.
+
+#### Examples
+
+Latest event:
+
+```http
+GET http://127.0.0.1:8000/events/latest
+```
+
+Last 20 events:
+
+```http
+GET http://127.0.0.1:8000/events/last-count?count=20
+```
+
+Events from the last six hours:
+
+```http
+GET http://127.0.0.1:8000/events/last-hours?hours=6
+```
+
+Events within a specific time range:
+
+```http
+GET http://127.0.0.1:8000/events/history?from_ms=1791741000000&to_ms=1791741600000
+```
+
+### 5.4. Actuators — LED commands
+
+| Method and path | JSON body | Behavior |
+|---|---|---|
+| `POST /actuators/led` | `{"value":"on"}`, `{"value":"off"}`, or `{"value":"toggle"}` | Publishes an LED command to AWS IoT Core. Returns HTTP `202 Accepted` when the publish call succeeds. |
+
+#### Request example
+
 ```bash
 curl -X POST "http://127.0.0.1:8000/actuators/led" \
   -H "Content-Type: application/json" \
   -d '{"value":"toggle"}'
 ```
 
-## 7. Troubleshooting
+The backend publishes the following payload to the configured topic:
 
-- **HTTP 404 from `/sensors/latest`:** the table has no telemetry item for `DEVICE_ID` yet, or the configured device ID does not match.
-- **HTTP 502 from a sensor endpoint:** check AWS credentials, region, table name, IAM `dynamodb:Query` permission, and the table key schema.
-- **HTTP 502 from `/actuators/led`:** check AWS credentials, region, IAM `iot:Publish` permission, the topic generated from `IOT_USER`, and the IoT Data Plane endpoint configuration.
-- **HTTP 422 from `/sensors/history`:** ensure `from_ms` and `to_ms` are non-negative integers and `from_ms <= to_ms`.
+```json
+{"action":"set","value":"toggle"}
+```
 
-## Notes for maintainers
+The accepted `value` strings are lowercase and must be exactly:
 
-- CORS is currently configured to allow all origins, with only `GET` and `POST` methods and the `Content-Type` header. Review this before exposing the service beyond a controlled development environment.
-- The provided `requirements.txt` is empty in the supplied archive. The installation command above installs the dependencies imported by the current source files; maintainers should populate and pin `requirements.txt` for reproducible builds.
+- `on`
+- `off`
+- `toggle`
+
+The `toggle` operation asks the device to change its current LED state. The endpoint itself does not read the current state.
+
+When the publish call succeeds, the API returns HTTP `202 Accepted` with a response similar to:
+
+```json
+{
+  "accepted": true,
+  "value": "toggle"
+}
+```
+
+This confirms successful publication by the backend, not execution by the device.
+
+The built-in page at `http://127.0.0.1:8000/` currently provides **Led ON** and **Led OFF** buttons. The API also accepts `toggle`.
+
+## 6. HTTP status codes and troubleshooting
+
+| HTTP status | Meaning / what to check |
+|---|---|
+| `200 OK` | The request succeeded. |
+| `202 Accepted` | The LED command publish call succeeded; device execution is not confirmed. |
+| `404 Not Found` | The requested latest sensor/event record was not found. Check that data exists and `DEVICE_ID` matches the DynamoDB records. |
+| `422 Unprocessable Entity` | A query parameter or request body failed validation. Check parameter types, allowed ranges, and timestamp order. |
+| `502 Bad Gateway` | The API could not complete an AWS operation. Check credentials, region, table names, DynamoDB key schema and permissions, IoT publish permission, topic, and IoT Data Plane endpoint. |
+
+`GET /test/health` only checks whether the FastAPI application responds. A successful response does not establish that AWS access works.
+
+## 7. Security notes
+
+- Restrict IAM permissions to the required DynamoDB tables and exact IoT command topic.
+- Do not commit `.env`, AWS keys, or other secrets.
+- CORS is configured to allow all origins (`*`) for this demo. Before exposing the backend publicly, replace this with the specific frontend origins you trust.
+- The current application allows only `GET` and `POST` CORS methods and the `Content-Type` header.
+- The current test routes contain only `/test/health`; there is no dedicated AWS connectivity test endpoint in this archive.
+
+---
+
+[Back to top](#iot-backend) | [Українська](README/README.uk.md)

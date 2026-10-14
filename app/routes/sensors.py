@@ -86,6 +86,7 @@ def get_sensor_readings_last_count(
     description="Retrieve sensor readings within the specified time range.",
     status_code=status.HTTP_200_OK,
 )
+
 def get_sensor_history_route(
     from_ms: int = Query(ge=0),
     to_ms: int = Query(ge=0),
@@ -96,11 +97,16 @@ def get_sensor_history_route(
             detail="from_ms must be less than or equal to to_ms",
         )
 
+    if to_ms - from_ms > 24 * 60 * 60 * 1000:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="The requested time range cannot exceed 24 hours.",
+        )
+
     try:
         return get_sensor_history(from_ms, to_ms)
     except (BotoCoreError, ClientError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Failed to retrieve sensor history from AWS",
-
         )
